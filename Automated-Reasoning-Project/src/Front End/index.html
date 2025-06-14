@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automated Reasoning</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Menu Bar -->
+<!-- Menu Bar for index.html -->
+<div class="menu-bar">
+    <!-- File Menu -->
+    <div class="menu-item dropdown">
+        File
+        <div class="dropdown-content">
+            <a href="#" onclick="loadKB()">Load KB…</a>
+            <a href="#" onclick="saveKB()">Save KB</a>
+            <a href="#" onclick="clearKB()">Clear KB</a>
+        </div>
+    </div>
+  
+    <!-- Edit Menu -->
+    <div class="menu-item dropdown">
+        Edit
+        <div class="dropdown-content">
+            <a href="#" onclick="clearInput()">Clear Input</a>
+            <a href="#" onclick="clearOutput()">Clear Output</a>
+            <a href="#" onclick="copyOutput()">Copy Output</a>
+        </div>
+    </div>
+  
+    <!-- Run Menu -->
+    <div class="menu-item dropdown">
+        Run
+        <div class="dropdown-content">
+            <a href="#" onclick="executeAll()">Run All Statements</a>
+            <a href="#" onclick="runQuery()">Run Current Query</a>
+            <a href="#" onclick="validateSyntax()">Validate Syntax</a>
+        </div>
+    </div>
+  
+    <!-- Help Menu -->
+    <div class="menu-item dropdown">
+        Help
+        <div class="dropdown-content">
+            <a href="#" onclick="showAbout()">About</a>
+            <a href="#" onclick="showDocumentation()">Documentation</a>
+        </div>
+    </div>
+  </div>
+
+    <!-- Input Panels -->
+    <div class="container">
+        <div class="panel input-panel">
+            <div class="panel-header">
+                <span>Enter your statements here</span>
+                <div class="panel-actions">
+                    <button class="assert-btn">Assert</button>
+                </div>
+            </div>
+            <div class="panel-content">
+                <textarea id="input1" spellcheck="false"></textarea>
+            </div>
+        </div>
+
+        <div class="resize-handle" id="resize1"></div>
+
+        <div class="panel input-panel">
+            <div class="panel-header">
+                <span>Enter your queries here</span>
+                <div class="panel-actions">
+                    <button class="query-btn">Query</button>
+                </div>
+            </div>
+            <div class="panel-content">
+                <textarea id="input2" spellcheck="false"></textarea>
+            </div>
+        </div>
+
+        <div class="resize-handle" id="resize2"></div>
+
+        <div class="panel output-panel">
+            <div class="panel-header">
+                <span>Output</span>
+                <div class="panel-actions">
+                    <a href="graph.html"><button class="view-graph-btn">View Graph</button></a>
+                    <button class="save-btn">Save</button>
+                    <button class="export-btn">Export to Neo4j</button>
+                </div>
+            </div>
+            <div class="panel-content">
+                <textarea id="output" spellcheck="false" readonly></textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span id="status-message">Ready</span>
+    </div>
+
+    <!-- Export to Neo4j Modal -->
+    <div class="modal" id="export-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Export to Neo4j</div>
+                <div class="close-modal">&times;</div>
+            </div>
+            <div class="form-group">
+                <label for="neo4j-uri">URI</label>
+                <input type="text" id="neo4j-uri" placeholder="bolt://localhost:7687">
+            </div>
+            <div class="form-group">
+                <label for="neo4j-user">Username</label>
+                <input type="text" id="neo4j-user" placeholder="neo4j">
+            </div>
+            <div class="form-group">
+                <label for="neo4j-password">Password</label>
+                <input type="password" id="neo4j-password" placeholder="password">
+            </div>
+            <div class="modal-actions">
+                <button id="cancel-export">Cancel</button>
+                <button id="confirm-export">Export</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Graph Viewer</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://unpkg.com/neovis.js/dist/neovis.js"></script>
+</head>
+<body>
+
+<!-- Menu Bar -->
+<div class="menu-bar">
+  <!-- Back button -->
+    <div class="menu-item">
+      <a href="index.html">← Back</a>
+    </div>
+  
+    <!-- File dropdown -->
+    <div class="menu-item dropdown">
+      File
+      <div class="dropdown-content">
+        <a href="#" onclick="openFile()">Open…</a>
+        <a href="#" onclick="saveGraph()">Save</a>
+        <a href="#" onclick="exportJSON()">Export JSON</a>
+      </div>
+    </div>
+  
+    <!-- View dropdown -->
+    <div class="menu-item dropdown">
+      View
+      <div class="dropdown-content">
+        <a href="#" onclick="zoomIn()">Zoom In</a>
+        <a href="#" onclick="zoomOut()">Zoom Out</a>
+        <a href="#" onclick="resetView()">Reset View</a>
+      </div>
+    </div>
+  
+    <!-- Tools dropdown -->
+    <div class="menu-item dropdown">
+      Tools
+      <div class="dropdown-content">
+        <a href="#" onclick="togglePhysics()">Toggle Physics</a>
+        <a href="#" onclick="highlightPaths()">Highlight Paths</a>
+      </div>
+    </div>
+  
+    <!-- Help dropdown -->
+    <div class="menu-item dropdown">
+      Help
+      <div class="dropdown-content">
+        <a href="#" onclick="showAbout()">About</a>
+        <a href="#" onclick="showDocumentation()">Documentation</a>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Graph Panel -->
+  <div class="container" style="flex-direction: column; padding:0;">
+    <div class="panel" style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+      <div class="panel-header"><span>Neo4j Graph Viewer</span></div>
+      <div class="panel-content" style="position: relative;">
+        <div id="neo4j-graph" style="flex:1; width:100%; height:100%;"></div>
+        <!-- PROPERTY BAR -->
+        <div id="prop-bar">
+          <div id="prop-bar-close" style="cursor:pointer;">×</div>
+          <h4>Properties</h4>
+          <div id="prop-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="status-bar"><span id="status-message">Waiting for credentials…</span></div>
+
+  <!-- CREDENTIALS MODAL -->
+  <div class="modal" id="creds-modal">
+    <div class="modal-content">
+      <div class="modal-header"><div class="modal-title">Connect to Neo4j</div><div class="close-modal">&times;</div></div>
+      <div class="form-group"><label for="neo4j-uri">Bolt URI</label><input id="neo4j-uri" value="bolt://localhost:7687"/></div>
+      <div class="form-group"><label for="neo4j-user">Username</label><input id="neo4j-user" value="neo4j"/></div>
+      <div class="form-group"><label for="neo4j-password">Password</label><input id="neo4j-password" type="password"/></div>
+      <div class="modal-actions"><button id="cancel-creds">Cancel</button><button id="confirm-creds">Connect</button></div>
+    </div>
+  </div>
+
+  <script>
+    // UI helpers
+    const statusEl = document.getElementById("status-message");
+    const credsModal = document.getElementById("creds-modal");
+    function setStatus(msg){ statusEl.textContent = msg; }
+    function showCreds(){ credsModal.style.display = 'flex'; }
+    function hideCreds(){ credsModal.style.display = 'none'; }
+
+    document.querySelector('.close-modal').onclick = () => { setStatus('Cancelled'); hideCreds(); };
+    document.getElementById('cancel-creds').onclick = () => { setStatus('Cancelled'); hideCreds(); };
+    document.getElementById('confirm-creds').onclick = () => {
+      const uri = document.getElementById('neo4j-uri').value,
+            user = document.getElementById('neo4j-user').value,
+            pwd  = document.getElementById('neo4j-password').value;
+      if(!uri||!user||!pwd){ alert('All fields required'); return; }
+      hideCreds(); renderGraph({uri,user,pwd});
+    };
+
+
+    async function renderGraph({uri,user,pwd}){
+      setStatus('Connecting…');
+      
+      // neo4j configuration
+      const config = {
+        containerId: 'neo4j-graph',
+        neo4j: { serverUrl:uri, serverUser:user, serverPassword:pwd },
+        serverDatabase: 'neo4j', encrypted: 'ENCRYPTION_OFF', trust:'TRUST_ALL_CERTIFICATES',
+        labels: { 
+          '*': { caption:'type'} 
+        },
+        labels: { 
+          'Entity': { caption:'name', 
+          title_properties:['name', 'type'] } 
+        },
+        relationships: { 
+          '*': { 
+            caption:'type', 
+            thickness:'weight', 
+            value:'id'} 
+        },
+        visConfig: {
+          nodes: {
+            shape: 'dot',
+            size: 25,
+          },
+          edges: {
+            arrows: { to: { enabled: true } },
+            smooth: {} //enabled: true, type: 'curvedCW', roundness: 0.25 
+          },
+          physics: { stabilization: true }
+        },
+
+        initialCypher: `
+        MATCH (n)-[r]->(m)
+        RETURN n, r, m, id(r) AS id
+        UNION
+        MATCH (n)<-[r]-(m)
+        RETURN n, r, m, id(r) AS id
+      `
+      //initialCypher: 'MATCH (n)-[r]-(m) RETURN n,r,m'
+      };
+
+      const viz = new NeoVis.default(config);
+      viz.registerOnEvent('completed', ()=>{
+        const net = viz.network, nodes = viz.nodes, edges = viz.edges;
+        const propBar = document.getElementById('prop-bar'), list = document.getElementById('prop-list');
+        let pinned = null;
+
+        function showProps(raw){
+          list.innerHTML = '';
+          // show labels/types
+          if(raw.labels) raw.labels.forEach(l=>{ let d=document.createElement('div'); d.textContent='Label: '+l; list.appendChild(d); });
+          if(raw.type) { let d=document.createElement('div'); d.textContent='Type: '+raw.type; list.appendChild(d); }
+          // all properties
+          Object.entries(raw.properties||{}).forEach(([k,v])=>{
+            let d=document.createElement('div'); d.textContent=`${k}: ${v}`; list.appendChild(d);
+          });
+          propBar.style.display='block';
+        }
+        function hideProps(){ if(!pinned) propBar.style.display='none'; }
+
+        net.on('hoverNode', params=>{ if(!pinned){ const n=nodes.get(params.node); showProps(n.raw||n);} });
+        net.on('blurNode', ()=>hideProps());
+        net.on('click', params=>{
+          if(params.nodes.length===1){ pinned=params.nodes[0]; const n=nodes.get(pinned); showProps(n.raw||n);} 
+          else if(params.edges.length===1){ pinned='e'; const e=edges.get(params.edges[0]); showProps(e.raw||e);} 
+          else { pinned=null; hideProps(); }
+        });
+        document.getElementById('prop-bar-close').onclick = ()=>{ pinned=null; hideProps(); };
+        setStatus('Graph ready!');
+      });
+      try{ await viz.render(); }
+      catch(e){ console.error(e); setStatus('Error'); showCreds(); }
+    }
+
+    
+// Menu bar options:
+function openFile() {
+  // Prompt user for a local JSON or Cypher file and re-render graph
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,.cypher,.txt';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = () => {
+      // you could parse JSON or Cypher then call viz.renderWith(…) 
+      console.log('Loaded file contents:', reader.result);
+      setStatus(`Loaded ${file.name}`);
+      // TODO: feed reader.result into NeoVis or your own loader
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+
+function saveGraph() {
+  // Serialize current network to JSON and download
+  const data = viz.network.export(); // vis.js export assuming method
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'graph-export.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('Graph saved as graph-export.json');
+}
+
+function exportJSON() {
+  // Alias for saveGraph – same functionality
+  saveGraph();
+}
+
+// ---------- View Menu ----------
+
+function zoomIn() {
+  viz.network.moveTo({ scale: viz.network.getScale() * 1.2 });
+  setStatus('Zoomed in');
+}
+
+function zoomOut() {
+  viz.network.moveTo({ scale: viz.network.getScale() * 0.8 });
+  setStatus('Zoomed out');
+}
+
+function resetView() {
+  viz.network.fit();
+  setStatus('View reset');
+}
+
+// ---------- Tools Menu ----------
+
+function togglePhysics() {
+  const params = viz.network.getOptions().physics;
+  viz.network.setOptions({ physics: { enabled: !params.enabled } });
+  setStatus(`Physics ${!params.enabled ? 'enabled' : 'disabled'}`);
+}
+
+function highlightPaths() {
+  // Example stub: you might implement Dijkstra or shortest-path highlighting
+  alert('Path-highlighting coming soon!');
+}
+
+// ---------- Help Menu ----------
+
+function showAbout() {
+  alert('Neo4j Graph Viewer v1.0\nBuilt with Neovis.js');
+}
+
+function showDocumentation() {
+  window.open('https://github.com/AndyFerns/Automated-Reasoning-Project#readme', '_blank');
+}
+    document.addEventListener('DOMContentLoaded', showCreds);
+  </script>
+</body>
+</html>
